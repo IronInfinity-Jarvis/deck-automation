@@ -9,8 +9,6 @@ from pptx.enum.text import PP_ALIGN, MSO_AUTO_SIZE
 from pptx.util import Inches, Pt
 import pandas as pd
 from pptx.oxml.xmlchemy import OxmlElement
-import time
-import win32com.client
 from io import BytesIO
 from spire.presentation.common import *
 from spire.presentation import Presentation as SpirePresentation
@@ -569,9 +567,9 @@ if __name__ == "__main__":
                 ppt_buffer = BytesIO()
                 ppt.save(ppt_buffer)
                 ppt_buffer.seek(0)
-                images = convert_ppt_to_images(ppt_buffer)
-                st.title("PowerPoint Table Formatted")
-                display_slideshow(images)
+                # images = convert_ppt_to_images(ppt_buffer)
+                # st.title("PowerPoint Table Formatted")
+                # display_slideshow(images)
                 st.download_button(
                     label="Download PowerPoint",
                     data=ppt_buffer,
