@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import os
-import random
 import re
 from pptx import Presentation as ptx
 from pptx.dml.color import RGBColor
@@ -494,9 +493,15 @@ if __name__ == "__main__":
                 data_in = df.drop(df.index[0])
 
             if slide_type == 'PRO_CON_KPI_Table_Loreal':
-                input_text = st.text_area("Enter a list (comma-separated):")
+                text_list = data_in[('Metric', 'Time Period')].tolist()
+                unique_keywords = set()
+                for text in text_list:
+                    words = re.split(r"[-\s]+", text)  # Split by "-" and spaces
+                    words = [re.sub(r"[^a-zA-Z0-9]", "", word).lower() for word in words]  # Remove special chars & lowercase
+                    unique_keywords.update(words)  # Add to set
+                unique_keywords = list(sorted(unique_keywords))
+                user_tag_list  = st.multiselect("Select the Tag elements:",unique_keywords)
                 num_tag_items = st.number_input("How many items for each tag?", min_value=1)
-                user_tag_list = [item.strip() for item in input_text.split(",") if item.strip()]
                 name_lst = data_in[('Metric', 'Time Period')].tolist()
                 df_concat = pd.DataFrame(columns=data_in.columns.to_list()).astype(data_in.dtypes.to_dict())
                 tag_pattern = generate_tag_patterns(user_tag_list)
@@ -518,7 +523,6 @@ if __name__ == "__main__":
                     brand_file = st.multiselect("Which elements do you want to see KPI table?", df_concat[('Metric', 'Time Period')].tolist())
                 else:
                     brand_file = st.multiselect("Which elements do you want to see KPI table?", data_in[('Metric', 'Time Period')].tolist())
-                st.write(brand_file)
             elif pensort_pref == "yes":
                 if slide_type != 'PRO_CON_KPI_Table_Loreal':
                     num_of_rows = st.number_input("How many rows of data would you like to see in KPI table?", min_value=1)
@@ -567,9 +571,9 @@ if __name__ == "__main__":
                 ppt_buffer = BytesIO()
                 ppt.save(ppt_buffer)
                 ppt_buffer.seek(0)
-                # images = convert_ppt_to_images(ppt_buffer)
-                # st.title("PowerPoint Table Formatted")
-                # display_slideshow(images)
+                images = convert_ppt_to_images(ppt_buffer)
+                st.title("PowerPoint Table Formatted")
+                display_slideshow(images)
                 st.download_button(
                     label="Download PowerPoint",
                     data=ppt_buffer,
