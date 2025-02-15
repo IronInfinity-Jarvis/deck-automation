@@ -21,7 +21,9 @@ from typing import Optional
 from google import generativeai as genai
 import google.generativeai as genai
 import textwrap 
+from dotenv import load_dotenv
 
+load_dotenv() 
 # Function to load data safely
 @st.cache_data
 def load_data(data_file):
@@ -55,8 +57,8 @@ def process_data(df, change, p2, p1):
 from typing import Tuple, Dict
 
 class AIDataInterpreter:
-    def __init__(self, api_key: str):
-        self.client = genai.configure(api_key=api_key)
+    def __init__(self):
+        self.client = genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
 
     def _structure_data(self, df: pd.DataFrame, time_period: str, 
                        change_period: Optional[str] = None) -> str:
@@ -709,8 +711,7 @@ if __name__ == "__main__":
                     slide_table_formatter_loreal_1(table, change_growth_list, no_cols+1)
                 elif slide_type == 'PRO_CON_KPI_Table_Loreal':
                     slide_table_formatter_loreal_2(table, change_growth_list, no_cols+1, matching_indices_list)
-                gemini_key = "AIzaSyDObHhSEOBEwQp--JR-NDrb-BPUUZM7e2Y"
-                ai_analyst = AIDataInterpreter(gemini_key)
+                ai_analyst = AIDataInterpreter()
                 header_text = ai_analyst.generate_insights(
                     data_in2,
                     tp,
