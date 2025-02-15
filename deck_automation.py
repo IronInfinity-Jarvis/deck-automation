@@ -22,6 +22,7 @@ from google import generativeai as genai
 import google.generativeai as genai
 import textwrap 
 from dotenv import load_dotenv
+import openpyxl
 
 load_dotenv() 
 # Function to load data safely
