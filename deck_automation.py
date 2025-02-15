@@ -13,6 +13,14 @@ from spire.presentation.common import *
 from spire.presentation import Presentation as SpirePresentation
 from PIL import Image
 from tempfile import NamedTemporaryFile
+from textwrap import wrap
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler
+import tiktoken
+from typing import Optional
+from google import generativeai as genai
+import google.generativeai as genai
+import textwrap 
 
 # Function to load data safely
 @st.cache_data
@@ -43,6 +51,118 @@ def process_data(df, change, p2, p1):
     df[("Pack Share change (%)", change)] = df["Pack Share", p2] - df["Pack Share", p1]
     df[("Proj. HH Growth (%)", change)] = (df["Projected HH", p2] / df["Projected HH", p1]) - 1
     return df
+# AI Header Generation Agent
+from typing import Tuple, Dict
+
+class AIDataInterpreter:
+    def __init__(self, api_key: str):
+        self.client = genai.configure(api_key=api_key)
+
+    def _structure_data(self, df: pd.DataFrame, time_period: str, 
+                       change_period: Optional[str] = None) -> str:
+        """Process data WITHOUT changing column names"""
+        structured = []
+        
+        for _, row in df.iterrows():
+            brand = row.iloc[0]
+            metrics = []
+            
+            for (metric, period), value in row.items():
+                if period == 'Time Period':
+                    continue
+                
+                # Format based on original metric names
+                fmt_value = self._format_value(metric, value)
+                metrics.append(f"{metric}: {fmt_value}")
+
+            structured.append(f"Brand: {brand}\n" + "\n".join(metrics))
+        
+        time_context = f"Current Period: {time_period}"
+        if change_period:
+            time_context += f"\nComparison Period: {change_period}"
+        
+        return f"{time_context}\n\n" + "\n\n".join(structured)
+
+    def _format_value(self, metric: str, value) -> str:
+        """Format values using ORIGINAL metric names"""
+        if any(kw in metric for kw in ['Penetration', 'Share', 'Growth', 'Change', 'SOR']):
+            return f"{value*100:.1f}%" if isinstance(value, (float, int)) else str(value)
+            
+        if any(kw in metric for kw in ['Rs.', 'Price', 'PPU', 'PPG']):
+            return f"₹{value:,.2f}" if isinstance(value, (float, int)) else str(value)
+            
+        if any(kw in metric for kw in ['Volume', 'Pack Size', 'NOP', 'HH']):
+            return f"{value:,.0f}" if isinstance(value, (float, int)) else str(value)
+            
+        return str(value)
+
+    def generate_insights(self, df: pd.DataFrame, time_period: str,
+                         change_period: Optional[str] = None) -> str:
+        """Generate insights using original column names"""
+        structured_data = self._structure_data(df, time_period, change_period)
+        
+        prompt = f"""Analyze this FMCG data using the original metric names. 
+        Extract key insights from:
+        {structured_data}
+        Focus on:
+        - Penetration changes
+        - Value/Volume Share shifts
+        - Price per gram trends
+        - Pack size developments 
+        - and different metrics provided in structured data understand them and write the best you think is important
+        - brand or category wise insights like top brands in different metrics , small brand growth
+        Use metric names exactly as they appear in the data
+        give the best insights you get combining all above, those insights should be out of the box, your insights should be complete no half works please write it in paragraph format, proper english grammar and paragrapgh rules.
+        write it in such a way that it fits in slide generated using python pptx library using below width and height
+        ppt = Presentation()
+        ppt.slide_width = Inches(13.33)  # Width
+        ppt.slide_height = Inches(7.5)  # Height, shorter lines with more number of lines should be your strategy not exceeding slide height
+        example insights:
+        1: >50% of HHs adopt Post-wash in their hair care regime; Affluent households spend ~₹1900 on both shampoo and post-wash in a year
+        2: Hair Care: Growth for Shampoo and Conditioner has mostly come from increased consumption whereas growth for Hair serum has mostly come from increased trials
+        3: Hair Care: New age brands like Mamaearth show strong presence; L'Oréal Professionnel leads the salon brands which have reached 1 in 4 HHs
+        4: Hair Care: Kerastase Paris leads in volume growth, while Mamaearth and other professional brands also show growth, with the exception of Biolage and OGX
+        each insight is for one slide output should be almost that many words, look how i written it and make your output this way dont copy these isights these are for you understanding."""
+        models = genai.GenerativeModel('gemini-2.0-flash')
+        response = models.generate_content(prompt)
+        raw_text = response.text.strip()
+        return self._format_for_ppt(raw_text)
+    
+    def _format_for_ppt(self, text: str) -> str:
+        """Format text for PowerPoint constraints"""
+        # Split into logical sections first
+        sections = text.split(' | ')
+        
+        formatted_lines = []
+        current_line = []
+        current_length = 0
+        
+        # Adjust based on your font testing (characters per line)
+        max_line_length = 100  # Start with 100 chars for 12pt font
+        
+        for section in sections:
+            if current_length + len(section) > max_line_length and current_line:
+                formatted_lines.append(" | ".join(current_line))
+                current_line = []
+                current_length = 0
+                
+            current_line.append(section)
+            current_length += len(section) + 3  # Account for " | " separator
+            
+        # Add any remaining content
+        if current_line:
+            formatted_lines.append(" | ".join(current_line))
+        
+        # Handle long individual insights with word wrap
+        final_lines = []
+        for line in formatted_lines:
+            if len(line) > max_line_length:
+                wrapped = textwrap.fill(line, width=max_line_length, 
+                                    break_long_words=False)
+                final_lines.extend(wrapped.split('\n'))
+            else:
+                final_lines.append(line)
+        return '\n'.join(final_lines)
 
 def generate_tag_patterns(tag_list):
     tag_patterns = []
@@ -321,7 +441,6 @@ def _set_cell_border(cell, border_color="000000", border_width='6350'):
 
 def slide_gen(pptx, data, no_rows, no_cols, Time_period, change=False, tp1=None, tp2=None, households=None):
     slide = pptx.slides.add_slide(blank_slide_layout)
-    # For adjusting the  Margins in inches for heading
     left = Inches(0.5)
     top = Inches(0.2)
     width = Inches(13)
@@ -333,9 +452,7 @@ def slide_gen(pptx, data, no_rows, no_cols, Time_period, change=False, tp1=None,
     # adding Paragraphs
     p = tf.add_paragraph()
     # adding text
-    p.text = (
-        "Hair Care: New age brands like Mamaearth show strong presence; L'Oréal Professionnel\nleads the salon brands "
-        "which have reached 1 in 4 HHs")
+    p.text = "Check Second slide for Insights!"
     p.font.bold = True
     p.font.size = Pt(24)
     p.font.name = 'LOREAL Essentielle'
@@ -362,6 +479,24 @@ def slide_gen(pptx, data, no_rows, no_cols, Time_period, change=False, tp1=None,
     second_row[0].merge(second_row[len(table.rows[1].cells) - 1])
     second_row[0].text = f"Universe HHs -  {households:,.0f} HHs"
     return table, data
+
+def slide_gen_insights(pptx,out_text):
+    slide = pptx.slides.add_slide(blank_slide_layout)
+    left = Inches(0.5)
+    top = Inches(0.2)
+    width = Inches(13)
+    height = Inches(1.5)
+    # creating textBox
+    txBox = slide.shapes.add_textbox(left, top, width, height)
+    # creating textFrames
+    tf = txBox.text_frame
+    # adding Paragraphs
+    p = tf.add_paragraph()
+    # adding text
+    p.text = out_text
+    p.font.bold = True
+    p.font.size = Pt(12)
+    p.font.name = 'LOREAL Essentielle'
 
 if __name__ == "__main__":
     metric_dic_change = {'Penetration (%)': 'Penetration(%)',
@@ -548,9 +683,19 @@ if __name__ == "__main__":
                 st.warning(f"selected more no. of rows than actually present in filtered data, hence setting no of rows to {max_rows_avail}")
                 no_rows = max_rows_avail + 3      
             filtered_data = filtered_data.iloc[:no_rows-3]  
+            selected_metrics = [key for key in st.session_state.selection_order.keys()]
+            filtered_columns = []
+            for metric in selected_metrics:
+                if metric in change_growth_list:
+                    col = (metric, f'{p1} vs {p2}')
+                else:
+                    col = (metric, tp)
+                filtered_columns.append(col)
+            entity_column = filtered_data.columns[0]
+            filtered_columns = [entity_column] + filtered_columns
+            filtered_data = filtered_data[filtered_columns]
             st.write("### Preview of Data filtered by your selections!")
             st.dataframe(filtered_data)
-
             if st.button("Process Data"):
                 final_dict = st.session_state.selection_order
                 no_cols = max(final_dict.values())
@@ -564,6 +709,14 @@ if __name__ == "__main__":
                     slide_table_formatter_loreal_1(table, change_growth_list, no_cols+1)
                 elif slide_type == 'PRO_CON_KPI_Table_Loreal':
                     slide_table_formatter_loreal_2(table, change_growth_list, no_cols+1, matching_indices_list)
+                gemini_key = "AIzaSyDObHhSEOBEwQp--JR-NDrb-BPUUZM7e2Y"
+                ai_analyst = AIDataInterpreter(gemini_key)
+                header_text = ai_analyst.generate_insights(
+                    data_in2,
+                    tp,
+                    change if growth_pref == 'yes' else None
+                )
+                slide_gen_insights(ppt,header_text)
                 df_table = extract_table_data(table)
                 st.title("PowerPoint Table Preview")
                 st.dataframe(df_table)
