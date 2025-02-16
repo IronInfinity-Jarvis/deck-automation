@@ -103,29 +103,26 @@ class AIDataInterpreter:
                          change_period: Optional[str] = None) -> str:
         """Generate insights using original column names"""
         structured_data = self._structure_data(df, time_period, change_period)
-        
-        prompt = f"""Analyze this FMCG data using the original metric names. 
-        Extract key insights from:
-        {structured_data}
-        Focus on:
-        - Penetration changes
-        - Value/Volume Share shifts
-        - Price per gram trends
-        - Pack size developments 
-        - and different metrics provided in structured data understand them and write the best you think is important
-        - brand or category wise insights like top brands in different metrics , small brand growth
-        Use metric names exactly as they appear in the data
-        give the best insights you get combining all above, those insights should be out of the box, your insights should be complete no half works please write it in paragraph format, proper english grammar and paragrapgh rules.
-        write it in such a way that it fits in slide generated using python pptx library using below width and height
-        ppt = Presentation()
-        ppt.slide_width = Inches(13.33)  # Width
-        ppt.slide_height = Inches(7.5)  # Height, shorter lines with more number of lines should be your strategy not exceeding slide height
-        example insights:
-        1: >50% of HHs adopt Post-wash in their hair care regime; Affluent households spend ~₹1900 on both shampoo and post-wash in a year
-        2: Hair Care: Growth for Shampoo and Conditioner has mostly come from increased consumption whereas growth for Hair serum has mostly come from increased trials
-        3: Hair Care: New age brands like Mamaearth show strong presence; L'Oréal Professionnel leads the salon brands which have reached 1 in 4 HHs
-        4: Hair Care: Kerastase Paris leads in volume growth, while Mamaearth and other professional brands also show growth, with the exception of Biolage and OGX
-        each insight is for one slide output should be almost that many words, look how i written it and make your output this way dont copy these isights these are for you understanding."""
+        prompt = f"""Analyze the given FMCG data using the original metric names exactly as they appear. Extract key insights from {structured_data}
+        focusing on below points if present:
+        Penetration trends across brands and categories
+        Shifts in value and volume and pack share over time not actual value,volume or projected households
+        Price per gram (PPG) variations and their implications
+        Pack size developments and consumer preferences
+        SOR metric which speaks about consumer loyalty
+        consumer in table represent usual consumer used brands other than professional name written brands.
+        hair serum, mask, shampoo, conditioner are subcategories under hair care if these appear they are not brands there are categories similarly for face and body.
+        Brand and category-level insights, including top brands across metrics and emerging small brands
+        Your insights should be comprehensive, data-driven, and out-of-the-box, combining multiple metrics to uncover meaningful trends. Write in proper paragraph format, ensuring concise yet complete insights that fit well within a PowerPoint slide created using the python-pptx library with, dont repeat what i gave you in prompt!:
+        Slide width: 13.33 inches
+        Slide height: 7.5 inches
+        Use shorter sentences and multiple lines to optimize readability without exceeding slide height.
+        Example insights for reference (do not copy):
+        >50% of households adopt post-wash treatments in hair care; affluent consumers spend ~₹1,900 annually on shampoo and post-wash products.
+        Shampoo and conditioner growth is driven by increased consumption, whereas hair serum growth stems from more consumers trying the category.
+        New-age brands like Mamaearth are rapidly gaining market share, while L'Oréal Professionnel dominates salon-exclusive brands, reaching 1 in 4 households.
+        Kerastase Paris leads in volume growth, while professional brands such as Mamaearth expand—except Biolage and OGX, which face declines.
+        Each insight should be at the same level of depth and clarity as the examples above. Ensure a strong narrative flow and full-sentence structure, avoiding fragmented insights."""
         models = genai.GenerativeModel('gemini-2.0-flash')
         response = models.generate_content(prompt)
         raw_text = response.text.strip()
@@ -207,7 +204,7 @@ def convert_ppt_to_images(ppt_buffer):
 # Display the slides in a slideshow format
 def display_slideshow(images):
     for img in images:
-        container_width = 1000  # Set the width you want for the container
+        container_width = 500  # Set the width you want for the container
         img = img.resize((container_width, int(container_width * img.height / img.width)))
         st.image(img, use_container_width=True)  # Display each slide as an image in Streamlit
 
@@ -718,17 +715,18 @@ if __name__ == "__main__":
                     tp,
                     change if growth_pref == 'yes' else None
                 )
+                st.title("Insights derived from your selections!")
+                st.write(header_text)
                 slide_gen_insights(ppt,header_text)
                 df_table = extract_table_data(table)
                 st.title("PowerPoint Table Preview")
                 st.dataframe(df_table)
-
                 ppt_buffer = BytesIO()
                 ppt.save(ppt_buffer)
                 ppt_buffer.seek(0)
-                images = convert_ppt_to_images(ppt_buffer)
-                st.title("PowerPoint Table Formatted")
-                display_slideshow(images)
+                # images = convert_ppt_to_images(ppt_buffer)
+                # st.title("PowerPoint Table Formatted")
+                # display_slideshow(images)
                 st.download_button(
                     label="Download PowerPoint",
                     data=ppt_buffer,
