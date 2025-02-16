@@ -223,7 +223,7 @@ def extract_table_data(table):
     df = pd.DataFrame(data)
     return df
 
-def slide_table_formatter_loreal_2(table, change_lst, no_cols, tag_first_indices):
+def slide_table_formatter_loreal_2(table, change_lst, no_cols, tag_first_indices, loreal_matching_indices):
     for col_idx in range(no_cols):
         for row_idx in range(len(table.rows)):
             row = table.rows[row_idx]  # Access the specific row
@@ -271,6 +271,15 @@ def slide_table_formatter_loreal_2(table, change_lst, no_cols, tag_first_indices
                         run.font.size = Pt(12)  # Set font size
                         run.font.bold = True  # Set font to not bold
                         run.font.color.rgb = RGBColor(0, 0, 0)  # Set font color to black
+            elif row_idx in loreal_matching_indices:
+                cell.fill.solid()
+                cell.fill.fore_color.rgb = RGBColor(255, 204, 204)  # Blue color
+                for paragraph in cell.text_frame.paragraphs:
+                    paragraph.alignment = PP_ALIGN.CENTER
+                    for run in paragraph.runs:
+                        run.font.size = Pt(12)  # Set font size
+                        run.font.bold = True  # Set font to not bold
+                        run.font.color.rgb = RGBColor(0, 0, 0)  # Set font color to black
             else:
                 for paragraph in cell.text_frame.paragraphs:
                     paragraph.alignment = PP_ALIGN.CENTER
@@ -290,7 +299,7 @@ def slide_table_formatter_loreal_2(table, change_lst, no_cols, tag_first_indices
                         for run in paragraph.runs:
                             run.font.color.rgb = RGBColor(0, 176, 80)
 
-def slide_table_formatter_loreal_1(table, change_lst, no_cols):
+def slide_table_formatter_loreal_1(table, change_lst, no_cols, loreal_matching_indices):
     for col_idx in range(no_cols):
         for row_idx in range(len(table.rows)):
             row = table.rows[row_idx]  # Access the specific row
@@ -329,6 +338,15 @@ def slide_table_formatter_loreal_1(table, change_lst, no_cols):
                         run.font.bold = False  # Set font to bold
                         run.font.color.rgb = RGBColor(127, 127, 127)  # Set font color to gray
                         run.font.name = 'LOREAL Essentielle'
+            elif row_idx in loreal_matching_indices:
+                cell.fill.solid()
+                cell.fill.fore_color.rgb = RGBColor(255, 204, 204)  # Blue color
+                for paragraph in cell.text_frame.paragraphs:
+                    paragraph.alignment = PP_ALIGN.CENTER
+                    for run in paragraph.runs:
+                        run.font.size = Pt(12)  # Set font size
+                        run.font.bold = True  # Set font to not bold
+                        run.font.color.rgb = RGBColor(0, 0, 0)  # Set font color to black
             else:
                 for paragraph in cell.text_frame.paragraphs:
                     paragraph.alignment = PP_ALIGN.CENTER
@@ -659,6 +677,7 @@ if __name__ == "__main__":
                     matching_indices = df_concat[df_concat[('Metric', 'Time Period')].isin(first_names)].index
                     matching_indices_list = matching_indices.tolist()
                     matching_indices_list = [num+3 for num in matching_indices_list]
+                    
 
                 if pensort_pref == 'no':
                     if slide_type == 'PRO_CON_KPI_Table_Loreal':
@@ -684,7 +703,6 @@ if __name__ == "__main__":
                     elif pensort_pref == "yes":
                         filtered_data = df_concat
                         no_rows = num_tag_items*len(user_tag_list)+3
-
                 max_rows_avail = len(filtered_data[('Metric', 'Time Period')].to_list())
                 if no_rows-3 > max_rows_avail:
                     st.warning(f"selected more no. of rows than actually present in filtered data, hence setting no of rows to {max_rows_avail}")
@@ -701,8 +719,18 @@ if __name__ == "__main__":
                 entity_column = filtered_data.columns[0]
                 filtered_columns = [entity_column] + filtered_columns
                 filtered_data = filtered_data[filtered_columns]
+                filtered_data = filtered_data.reset_index(drop=True)
                 st.write("### Preview of Data filtered by your selections!")
                 st.dataframe(filtered_data)
+                pink_higlights = ["L'oreal","kerastase","Biolage","matrix"]
+                pink_tag_pattern = generate_tag_patterns(pink_higlights)
+                loreal_filtered_words_lst = []
+                loreal_name_lst = filtered_data[('Metric', 'Time Period')].tolist()
+                for pattern in pink_tag_pattern:
+                    loreal_filtered_words_lst = loreal_filtered_words_lst + [word for word in loreal_name_lst if re.search(pattern, word, re.IGNORECASE)]
+                loreal_matching_indices = filtered_data[filtered_data[('Metric', 'Time Period')].isin(loreal_filtered_words_lst)].index.tolist()
+                loreal_matching_indices = [num+3 for num in loreal_matching_indices]
+
                 if st.button("Process Data"):
                     final_dict = st.session_state.selection_order
                     no_cols = max(final_dict.values())
@@ -713,9 +741,9 @@ if __name__ == "__main__":
                     table, data_in2 = slide_gen(ppt, filtered_data, no_rows, no_cols+1, tp, change=True if growth_pref=='yes' else False, tp1=p1 if growth_pref=='yes' else None, tp2=p2 if growth_pref=='yes' else None, households=household)
                     values_inp(metric_dic_change, final_dict, table, data_in2, 3, no_rows, no_cols, change_growth_list, tp, p1 = p1 if growth_pref=='yes' else None, p2 = p2 if growth_pref=='yes' else None)
                     if slide_type == 'Usual_KPI_Table_Loreal':
-                        slide_table_formatter_loreal_1(table, change_growth_list, no_cols+1)
+                        slide_table_formatter_loreal_1(table, change_growth_list, no_cols+1, loreal_matching_indices)
                     elif slide_type == 'PRO_CON_KPI_Table_Loreal':
-                        slide_table_formatter_loreal_2(table, change_growth_list, no_cols+1, matching_indices_list)
+                        slide_table_formatter_loreal_2(table, change_growth_list, no_cols+1, matching_indices_list, loreal_matching_indices)
                     ai_analyst = AIDataInterpreter()
                     header_text = ai_analyst.generate_insights(
                         data_in2,
