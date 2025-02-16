@@ -27,12 +27,16 @@ import openpyxl
 load_dotenv() 
 # Function to load data safely
 @st.cache_data
-def load_data(data_file):
+def load_sheet_names(data_file):
     if data_file is not None:
-        df = pd.read_excel(data_file, header=[0, 1])
-        df.columns = df.columns.to_frame().ffill(axis=0)
-        return df
-    return None
+        xls = pd.ExcelFile(data_file)
+        return xls.sheet_names
+    return []
+
+def load_data(data_file, sheet_name):
+    df = pd.read_excel(data_file, sheet_name=sheet_name, header=[0, 1])
+    df.columns = df.columns.to_frame().ffill(axis=0)
+    return df
 
 def process_data(df, change, p2, p1):
     df[("Pen. Change (%)", change)] = df[('Penetration (%)', p2)] - df[('Penetration (%)', p1)]
@@ -562,176 +566,179 @@ if __name__ == "__main__":
     st.title("PPT Generator 🤖")
     uploaded_file = st.file_uploader("Upload a KPI report Excel file", type=["xlsx", "xls"])
     if uploaded_file is not None:
-        df = load_data(uploaded_file)
-        if df is not None:
-            st.write("### Preview of Uploaded Data:")
-            st.dataframe(df)
-            time_periods = [col[1] for col in df.columns if isinstance(col, tuple)]
-            metric_keys = [col[0] for col in df.columns if isinstance(col, tuple)]
-            unique_tp = list(set(time_periods))
-            metric_keys = list(set(metric_keys))
-            col1, col2 = st.columns(2)
-            if 'Time Period' in unique_tp:
-                unique_tp.remove('Time Period')
-            st.title("Select Time Period")
-            prefs = ['no','yes']
-            type_of_slide = ['Usual_KPI_Table_Loreal','PRO_CON_KPI_Table_Loreal']
-            with col1:
-                tp = st.selectbox("Choose Singular Time period for specific period KPI Tables:", unique_tp)
-            growth_pref = st.radio("Do you want to see change or growth of metrics as headers in table?", prefs, index = 0)
-            if growth_pref == 'yes':
-                with col2:
-                    p1 = st.selectbox("Choose Second Timeperiod for growths and changes:", unique_tp, index=1)
-            p2 = tp
-            pensort_pref = st.radio("Do you want your data to be penetration sorted?", prefs, index = 0)
-            filtered_dic = {key: metric_dic_change[key] for key in metric_keys if key in metric_dic_change}
-            if growth_pref == 'yes':
-                updated_dic = {metric_mapping[key]: metric_dic_change[metric_mapping[key]] for key in filtered_dic if key in metric_mapping}
-                for k, v in updated_dic.items():
-                    filtered_dic.setdefault(k, v)  # Only adds if `k` is not already in `filtered_dic`
-            st.title("Select Metrics and Order")
-            if "selection_order" not in st.session_state:
-                st.session_state.selection_order = {}
-            num_cols = 5  # Number of columns per row
-            cols = st.columns(num_cols)
-            filtered_dic_sorted = {key : filtered_dic[key] for key in metric_dic_change if key in filtered_dic}
-            keys = list(filtered_dic_sorted.keys())
-            for idx, key in enumerate(keys):
-                display_name = filtered_dic_sorted[key]
-                col = cols[idx % num_cols]  # Assign column dynamically
-                with col:
-                    selected = st.checkbox(f"{display_name}", key=f"check_{key}")
-                    if selected:
-                        if key not in st.session_state.selection_order:
-                            max_order = max(st.session_state.selection_order.values(), default=0) + 1
-                            st.session_state.selection_order[key] = max_order
-                    else:
-                        if key in st.session_state.selection_order:
-                            del st.session_state.selection_order[key]  # Remove if unchecked
+        sheet_names = load_sheet_names(uploaded_file)
+        if sheet_names:
+            city = st.selectbox("Please choose the city or sheet name:", sheet_names)
+            df = load_data(uploaded_file, city)
+            if df is not None:
+                st.write("### Preview of Uploaded Data:")
+                st.dataframe(df)
+                time_periods = [col[1] for col in df.columns if isinstance(col, tuple)]
+                metric_keys = [col[0] for col in df.columns if isinstance(col, tuple)]
+                unique_tp = list(set(time_periods))
+                metric_keys = list(set(metric_keys))
+                col1, col2 = st.columns(2)
+                if 'Time Period' in unique_tp:
+                    unique_tp.remove('Time Period')
+                st.title("Select Time Period")
+                prefs = ['no','yes']
+                type_of_slide = ['Usual_KPI_Table_Loreal','PRO_CON_KPI_Table_Loreal']
+                with col1:
+                    tp = st.selectbox("Choose Singular Time period for specific period KPI Tables:", unique_tp)
+                growth_pref = st.radio("Do you want to see change or growth of metrics as headers in table?", prefs, index = 0)
+                if growth_pref == 'yes':
+                    with col2:
+                        p1 = st.selectbox("Choose Second Timeperiod for growths and changes:", unique_tp, index=1)
+                p2 = tp
+                pensort_pref = st.radio("Do you want your data to be penetration sorted?", prefs, index = 0)
+                filtered_dic = {key: metric_dic_change[key] for key in metric_keys if key in metric_dic_change}
+                if growth_pref == 'yes':
+                    updated_dic = {metric_mapping[key]: metric_dic_change[metric_mapping[key]] for key in filtered_dic if key in metric_mapping}
+                    for k, v in updated_dic.items():
+                        filtered_dic.setdefault(k, v)  # Only adds if `k` is not already in `filtered_dic`
+                st.title("Select Metrics and Order")
+                if "selection_order" not in st.session_state:
+                    st.session_state.selection_order = {}
+                num_cols = 5  # Number of columns per row
+                cols = st.columns(num_cols)
+                filtered_dic_sorted = {key : filtered_dic[key] for key in metric_dic_change if key in filtered_dic}
+                keys = list(filtered_dic_sorted.keys())
+                for idx, key in enumerate(keys):
+                    display_name = filtered_dic_sorted[key]
+                    col = cols[idx % num_cols]  # Assign column dynamically
+                    with col:
+                        selected = st.checkbox(f"{display_name}", key=f"check_{key}")
+                        if selected:
+                            if key not in st.session_state.selection_order:
+                                max_order = max(st.session_state.selection_order.values(), default=0) + 1
+                                st.session_state.selection_order[key] = max_order
+                        else:
+                            if key in st.session_state.selection_order:
+                                del st.session_state.selection_order[key]  # Remove if unchecked
 
-            # **Reorder the dictionary so that numbers are sequential (1, 2, 3...)**
-            sorted_keys = sorted(st.session_state.selection_order, key=lambda k: st.session_state.selection_order[k])
-            st.session_state.selection_order = {key: i+1 for i, key in enumerate(sorted_keys)}
-            st.write("### Selected Metrics and Their Order")
-            st.write(st.session_state.selection_order)
+                # **Reorder the dictionary so that numbers are sequential (1, 2, 3...)**
+                sorted_keys = sorted(st.session_state.selection_order, key=lambda k: st.session_state.selection_order[k])
+                st.session_state.selection_order = {key: i+1 for i, key in enumerate(sorted_keys)}
+                st.write("### Selected Metrics and Their Order")
+                st.write(st.session_state.selection_order)
 
-            slide_type = st.selectbox("What kind of slide do you want to generate?", type_of_slide)
-            if growth_pref == 'yes':
-                st.write(f"Selected Time Periods: {p1} and {p2}")
-                change = f'{p1} vs {p2}'
-                df = process_data(df, change, p2, p1)
-            household = df[('Projected HH', tp)].iloc[0]
-            if pensort_pref=="yes":
-                df_sorted = df.sort_values(by=('Penetration (%)', tp), ascending=False)
-                data_in = df_sorted
-            else:
-                data_in = df.drop(df.index[0])
+                slide_type = st.selectbox("What kind of slide do you want to generate?", type_of_slide)
+                if growth_pref == 'yes':
+                    st.write(f"Selected Time Periods: {p1} and {p2}")
+                    change = f'{p1} vs {p2}'
+                    df = process_data(df, change, p2, p1)
+                household = df[('Projected HH', tp)].iloc[0]
+                if pensort_pref=="yes":
+                    df_sorted = df.sort_values(by=('Penetration (%)', tp), ascending=False)
+                    data_in = df_sorted
+                else:
+                    data_in = df.drop(df.index[0])
 
-            if slide_type == 'PRO_CON_KPI_Table_Loreal':
-                text_list = data_in[('Metric', 'Time Period')].tolist()
-                unique_keywords = set()
-                for text in text_list:
-                    words = re.split(r"[-\s]+", text)  # Split by "-" and spaces
-                    words = [re.sub(r"[^a-zA-Z0-9]", "", word).lower() for word in words]  # Remove special chars & lowercase
-                    unique_keywords.update(words)  # Add to set
-                unique_keywords = list(sorted(unique_keywords))
-                user_tag_list  = st.multiselect("Select the Tag elements:",unique_keywords)
-                num_tag_items = st.number_input("How many items for each tag?", min_value=1)
-                name_lst = data_in[('Metric', 'Time Period')].tolist()
-                df_concat = pd.DataFrame(columns=data_in.columns.to_list()).astype(data_in.dtypes.to_dict())
-                tag_pattern = generate_tag_patterns(user_tag_list)
-                df_list = []
-                first_names = []
-                for pattern in tag_pattern:
-                    filtered_words = [word for word in name_lst if re.search(pattern, word, re.IGNORECASE)]
-                    df_tag = data_in[data_in[('Metric', 'Time Period')].isin(filtered_words)]
-                    df_tag = df_tag.head(num_tag_items)
-                    first_names.append(df_tag[('Metric', 'Time Period')].iloc[0])
-                    df_list.append(df_tag)
-                df_concat = pd.concat(df_list, ignore_index=True) if df_list else pd.DataFrame(columns=data_in.columns.to_list())
-                matching_indices = df_concat[df_concat[('Metric', 'Time Period')].isin(first_names)].index
-                matching_indices_list = matching_indices.tolist()
-                matching_indices_list = [num+3 for num in matching_indices_list]
-
-            if pensort_pref == 'no':
                 if slide_type == 'PRO_CON_KPI_Table_Loreal':
-                    brand_file = st.multiselect("Which elements do you want to see KPI table?", df_concat[('Metric', 'Time Period')].tolist())
-                else:
-                    brand_file = st.multiselect("Which elements do you want to see KPI table?", data_in[('Metric', 'Time Period')].tolist())
-            elif pensort_pref == "yes":
-                if slide_type != 'PRO_CON_KPI_Table_Loreal':
-                    num_of_rows = st.number_input("How many rows of data would you like to see in KPI table?", min_value=1)
+                    text_list = data_in[('Metric', 'Time Period')].tolist()
+                    unique_keywords = set()
+                    for text in text_list:
+                        words = re.split(r"[-\s]+", text)  # Split by "-" and spaces
+                        words = [re.sub(r"[^a-zA-Z0-9]", "", word).lower() for word in words]  # Remove special chars & lowercase
+                        unique_keywords.update(words)  # Add to set
+                    unique_keywords = list(sorted(unique_keywords))
+                    user_tag_list  = st.multiselect("Select the Tag elements:",unique_keywords)
+                    num_tag_items = st.number_input("How many items for each tag?", min_value=1)
+                    name_lst = data_in[('Metric', 'Time Period')].tolist()
+                    df_concat = pd.DataFrame(columns=data_in.columns.to_list()).astype(data_in.dtypes.to_dict())
+                    tag_pattern = generate_tag_patterns(user_tag_list)
+                    df_list = []
+                    first_names = []
+                    for pattern in tag_pattern:
+                        filtered_words = [word for word in name_lst if re.search(pattern, word, re.IGNORECASE)]
+                        df_tag = data_in[data_in[('Metric', 'Time Period')].isin(filtered_words)]
+                        df_tag = df_tag.head(num_tag_items)
+                        first_names.append(df_tag[('Metric', 'Time Period')].iloc[0])
+                        df_list.append(df_tag)
+                    df_concat = pd.concat(df_list, ignore_index=True) if df_list else pd.DataFrame(columns=data_in.columns.to_list())
+                    matching_indices = df_concat[df_concat[('Metric', 'Time Period')].isin(first_names)].index
+                    matching_indices_list = matching_indices.tolist()
+                    matching_indices_list = [num+3 for num in matching_indices_list]
 
-            if slide_type == 'Usual_KPI_Table_Loreal':
                 if pensort_pref == 'no':
-                    filtered_data = data_in[data_in[('Metric', 'Time Period')].isin(brand_file)]
-                    no_rows = len(brand_file) + 3
-                elif pensort_pref == 'yes':
-                    filtered_data = data_in
-                    no_rows = num_of_rows + 3
-
-            elif slide_type == 'PRO_CON_KPI_Table_Loreal':
-                if pensort_pref == 'no':
-                    filtered_data = df_concat[df_concat[('Metric', 'Time Period')].isin(brand_file)]
-                    no_rows = len(brand_file) + 3
+                    if slide_type == 'PRO_CON_KPI_Table_Loreal':
+                        brand_file = st.multiselect("Which elements do you want to see KPI table?", df_concat[('Metric', 'Time Period')].tolist())
+                    else:
+                        brand_file = st.multiselect("Which elements do you want to see KPI table?", data_in[('Metric', 'Time Period')].tolist())
                 elif pensort_pref == "yes":
-                    filtered_data = df_concat
-                    no_rows = num_tag_items*len(user_tag_list)+3
+                    if slide_type != 'PRO_CON_KPI_Table_Loreal':
+                        num_of_rows = st.number_input("How many rows of data would you like to see in KPI table?", min_value=1)
 
-            max_rows_avail = len(filtered_data[('Metric', 'Time Period')].to_list())
-            if no_rows-3 > max_rows_avail:
-                st.warning(f"selected more no. of rows than actually present in filtered data, hence setting no of rows to {max_rows_avail}")
-                no_rows = max_rows_avail + 3      
-            filtered_data = filtered_data.iloc[:no_rows-3]  
-            selected_metrics = [key for key in st.session_state.selection_order.keys()]
-            filtered_columns = []
-            for metric in selected_metrics:
-                if metric in change_growth_list:
-                    col = (metric, f'{p1} vs {p2}')
-                else:
-                    col = (metric, tp)
-                filtered_columns.append(col)
-            entity_column = filtered_data.columns[0]
-            filtered_columns = [entity_column] + filtered_columns
-            filtered_data = filtered_data[filtered_columns]
-            st.write("### Preview of Data filtered by your selections!")
-            st.dataframe(filtered_data)
-            if st.button("Process Data"):
-                final_dict = st.session_state.selection_order
-                no_cols = max(final_dict.values())
-                ppt = ptx()
-                ppt.slide_width = Inches(13.33)  # Width
-                ppt.slide_height = Inches(7.5)  # Height
-                blank_slide_layout = ppt.slide_layouts[6]
-                table, data_in2 = slide_gen(ppt, filtered_data, no_rows, no_cols+1, tp, change=True if growth_pref=='yes' else False, tp1=p1 if growth_pref=='yes' else None, tp2=p2 if growth_pref=='yes' else None, households=household)
-                values_inp(metric_dic_change, final_dict, table, data_in2, 3, no_rows, no_cols, change_growth_list, tp, p1 = p1 if growth_pref=='yes' else None, p2 = p2 if growth_pref=='yes' else None)
                 if slide_type == 'Usual_KPI_Table_Loreal':
-                    slide_table_formatter_loreal_1(table, change_growth_list, no_cols+1)
+                    if pensort_pref == 'no':
+                        filtered_data = data_in[data_in[('Metric', 'Time Period')].isin(brand_file)]
+                        no_rows = len(brand_file) + 3
+                    elif pensort_pref == 'yes':
+                        filtered_data = data_in
+                        no_rows = num_of_rows + 3
+
                 elif slide_type == 'PRO_CON_KPI_Table_Loreal':
-                    slide_table_formatter_loreal_2(table, change_growth_list, no_cols+1, matching_indices_list)
-                ai_analyst = AIDataInterpreter()
-                header_text = ai_analyst.generate_insights(
-                    data_in2,
-                    tp,
-                    change if growth_pref == 'yes' else None
-                )
-                st.title("Insights derived from your selections!")
-                st.write(header_text)
-                slide_gen_insights(ppt,header_text)
-                df_table = extract_table_data(table)
-                st.title("PowerPoint Table Preview")
-                st.dataframe(df_table)
-                ppt_buffer = BytesIO()
-                ppt.save(ppt_buffer)
-                ppt_buffer.seek(0)
-                # images = convert_ppt_to_images(ppt_buffer)
-                # st.title("PowerPoint Table Formatted")
-                # display_slideshow(images)
-                st.download_button(
-                    label="Download PowerPoint",
-                    data=ppt_buffer,
-                    file_name="generated_presentation.pptx",
-                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                )
-        else:
-            st.error("Error: The file could not be read. Please check the format.")
+                    if pensort_pref == 'no':
+                        filtered_data = df_concat[df_concat[('Metric', 'Time Period')].isin(brand_file)]
+                        no_rows = len(brand_file) + 3
+                    elif pensort_pref == "yes":
+                        filtered_data = df_concat
+                        no_rows = num_tag_items*len(user_tag_list)+3
+
+                max_rows_avail = len(filtered_data[('Metric', 'Time Period')].to_list())
+                if no_rows-3 > max_rows_avail:
+                    st.warning(f"selected more no. of rows than actually present in filtered data, hence setting no of rows to {max_rows_avail}")
+                    no_rows = max_rows_avail + 3      
+                filtered_data = filtered_data.iloc[:no_rows-3]  
+                selected_metrics = [key for key in st.session_state.selection_order.keys()]
+                filtered_columns = []
+                for metric in selected_metrics:
+                    if metric in change_growth_list:
+                        col = (metric, f'{p1} vs {p2}')
+                    else:
+                        col = (metric, tp)
+                    filtered_columns.append(col)
+                entity_column = filtered_data.columns[0]
+                filtered_columns = [entity_column] + filtered_columns
+                filtered_data = filtered_data[filtered_columns]
+                st.write("### Preview of Data filtered by your selections!")
+                st.dataframe(filtered_data)
+                if st.button("Process Data"):
+                    final_dict = st.session_state.selection_order
+                    no_cols = max(final_dict.values())
+                    ppt = ptx()
+                    ppt.slide_width = Inches(13.33)  # Width
+                    ppt.slide_height = Inches(7.5)  # Height
+                    blank_slide_layout = ppt.slide_layouts[6]
+                    table, data_in2 = slide_gen(ppt, filtered_data, no_rows, no_cols+1, tp, change=True if growth_pref=='yes' else False, tp1=p1 if growth_pref=='yes' else None, tp2=p2 if growth_pref=='yes' else None, households=household)
+                    values_inp(metric_dic_change, final_dict, table, data_in2, 3, no_rows, no_cols, change_growth_list, tp, p1 = p1 if growth_pref=='yes' else None, p2 = p2 if growth_pref=='yes' else None)
+                    if slide_type == 'Usual_KPI_Table_Loreal':
+                        slide_table_formatter_loreal_1(table, change_growth_list, no_cols+1)
+                    elif slide_type == 'PRO_CON_KPI_Table_Loreal':
+                        slide_table_formatter_loreal_2(table, change_growth_list, no_cols+1, matching_indices_list)
+                    ai_analyst = AIDataInterpreter()
+                    header_text = ai_analyst.generate_insights(
+                        data_in2,
+                        tp,
+                        change if growth_pref == 'yes' else None
+                    )
+                    st.title("Insights derived from your selections!")
+                    st.write(header_text)
+                    slide_gen_insights(ppt,header_text)
+                    df_table = extract_table_data(table)
+                    st.title("PowerPoint Table Preview")
+                    st.dataframe(df_table)
+                    ppt_buffer = BytesIO()
+                    ppt.save(ppt_buffer)
+                    ppt_buffer.seek(0)
+                    # images = convert_ppt_to_images(ppt_buffer)
+                    # st.title("PowerPoint Table Formatted")
+                    # display_slideshow(images)
+                    st.download_button(
+                        label="Download PowerPoint",
+                        data=ppt_buffer,
+                        file_name="generated_presentation.pptx",
+                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                    )
+            else:
+                st.error("Error: The file could not be read. Please check the format.")
